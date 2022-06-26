@@ -5,6 +5,7 @@ import 'package:flutter_random_menu/components/GradientButton.dart';
 import 'package:flutter_random_menu/components/MyCard.dart';
 import 'package:flutter_random_menu/components/RoundedInput.dart';
 import 'package:flutter_random_menu/models/menu.model.dart';
+import 'package:flutter_random_menu/services/menu.service.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:hive/hive.dart';
 
@@ -34,7 +35,7 @@ class _MenuPageState extends State<MenuPage> {
     }
     Size size = MediaQuery.of(context).size;
     bool onSubmit = false;
-    Future<String> bottomSheetCallback = await showModalBottomSheet(
+    await showModalBottomSheet(
         backgroundColor: Colors.transparent,
         context: context,
         builder: (context) {
@@ -135,19 +136,131 @@ class _MenuPageState extends State<MenuPage> {
     }
   }
 
-  Future<bool> getMenu() async {
+  Future<void> openRemoveWarning(Menu menu) async {
+    Size size = MediaQuery.of(context).size;
+    bool onSubmit = false;
+    await showModalBottomSheet(
+        backgroundColor: Colors.transparent,
+        context: context,
+        builder: (context) {
+          return StatefulBuilder(
+              builder: (BuildContext bottomContext, StateSetter mystate) {
+            return SingleChildScrollView(
+              child: Stack(
+                children: [
+                  Container(
+                    margin: EdgeInsets.only(top: 10),
+                    padding: EdgeInsets.all(30),
+                    decoration: BoxDecoration(
+                      color: Colors.grey[200],
+                      borderRadius: BorderRadius.only(
+                        topLeft: Radius.circular(30),
+                        topRight: Radius.circular(30),
+                      ),
+                    ),
+                    height: MediaQuery.of(context).size.height / 2.5 +
+                        MediaQuery.of(context).viewInsets.bottom,
+                    child: Wrap(
+                      children: <Widget>[
+                        Center(
+                          child: Icon(
+                            Icons.warning,
+                            color: Colors.orangeAccent[200],
+                            size: 72,
+                          ),
+                        ),
+                        Center(
+                          child: Text('ลบ "${menu.menuName}" หรือไม่?',
+                              style: TextStyle(
+                                  fontSize: 20, fontWeight: FontWeight.bold)),
+                        ),
+                        Center(
+                          child: Text('คุณจะไม่สามารถกู้คืนข้อมูลได้',
+                              style: TextStyle(
+                                  fontSize: 14, fontWeight: FontWeight.bold)),
+                        ),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                          children: [
+                            Container(
+                              margin: EdgeInsets.only(top: size.height * 0.04),
+                              child: ClipRRect(
+                                  borderRadius: BorderRadius.circular(20),
+                                  child: Container(
+                                    color: Colors.grey[600],
+                                    width: size.width * 0.4,
+                                    height: size.height * 0.08,
+                                    child: TextButton(
+                                      onPressed: () async {
+                                        Navigator.pop(context);
+                                      },
+                                      child: Text(
+                                        "ยกเลิก",
+                                        style: TextStyle(color: Colors.white),
+                                      ),
+                                    ),
+                                  )),
+                            ),
+                            Container(
+                              margin: EdgeInsets.only(top: size.height * 0.04),
+                              child: ClipRRect(
+                                  borderRadius: BorderRadius.circular(20),
+                                  child: Container(
+                                    color: Colors.red[500],
+                                    width: size.width * 0.4,
+                                    height: size.height * 0.08,
+                                    child: TextButton(
+                                      onPressed: () async {
+                                        onSubmit = true;
+                                        Navigator.pop(context);
+                                      },
+                                      child: Text(
+                                        "ลบ",
+                                        style: TextStyle(color: Colors.white),
+                                      ),
+                                    ),
+                                  )),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                  Positioned(
+                    top: 0,
+                    right: 10,
+                    child: InkWell(
+                      onTap: () {
+                        Navigator.pop(context);
+                      },
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(50),
+                        child: Container(
+                          color: Colors.white,
+                          width: 32,
+                          height: 32,
+                          child: Icon(Icons.close, color: Colors.red[700]),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            );
+          });
+        });
+    if (onSubmit) {
+      setState(() {
+        menuList.remove(menu);
+        Hive.box('menuBox')
+            .put('menuList', menuList.map((e) => e.toJson()).toList());
+      });
+    }
+  }
+
+  Future<bool> initMenuList() async {
     try {
-      isLoading = true;
-      menuList = [];
-      var menuBox = await Hive.openBox('menuBox');
-      await Future.delayed(Duration(seconds: 2));
-      if (menuBox.get('menuList') == null) {
-        menuBox.put('menuList', []);
-      }
-      for (var menu in menuBox.get('menuList')) {
-        menuList.add(Menu(menuName: menu["menuName"]));
-      }
-      isLoading = false;
+      menuList = await MenuService.getMenu();
       return true;
     } catch (e) {
       return false;
@@ -181,12 +294,12 @@ class _MenuPageState extends State<MenuPage> {
           ),
         ),
         SizedBox(
-          height: size.height * 0.05,
+          height: size.height * 0.01,
         ),
         FutureBuilder(
-          future: getMenu(),
+          future: initMenuList(),
           builder: (context, snapshot) {
-            if (isLoading) {
+            if (!snapshot.hasData) {
               return Center(
                 child: CircularProgressIndicator(),
               );
@@ -209,14 +322,17 @@ class _MenuPageState extends State<MenuPage> {
                     child: GridView.count(
                         crossAxisCount: 2,
                         crossAxisSpacing: 8,
+                        mainAxisSpacing: 8,
                         padding: EdgeInsets.all(16),
                         children: [
                           for (Menu menu in menuList)
                             MyCard(
                                 text: menu.menuName,
                                 imageUrl:
-                                    'https://firebasestorage.googleapis.com/v0/b/flutterbricks-public.appspot.com/o/illustrations%2Fundraw_Working_late_re_0c3y%201.png?alt=media&token=7b880917-2390-4043-88e5-5d58a9d70555',
-                                onRemovePressed: () {},
+                                    'https://cdn-icons-png.flaticon.com/512/2927/2927347.png',
+                                onRemovePressed: () {
+                                  openRemoveWarning(menu);
+                                },
                                 onEditPressed: () {
                                   openEditMenu(menu);
                                 })
